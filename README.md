@@ -1,121 +1,45 @@
-### Project: Roblox Thumbnail Generator
+I want to build a full-stack MVP for a web app called “Roblox Thumbnail Generator.”
 
-This is a full-stack starter project scaffold for a Roblox Thumbnail Generator MVP.
+### 💡 High-level goal:
+The app allows users to:
+1. Draw on a canvas
+2. Upload reference images
+3. Type a text prompt describing their scene
+4. Get back 5 AI-generated Roblox-style thumbnails
+5. Pay via Stripe to unlock the full-resolution images
 
-**Stack**:
-- Frontend: React + Vite + TypeScript
-- Backend: ASP.NET Core 8 Web API
+### 🧱 Tech stack:
+- **Frontend**: React (with TypeScript)
+  - Canvas drawing via Konva.js or Fabric.js
+  - File uploader with preview
+  - Text input for prompt
+  - Stripe payment via `@stripe/react-stripe-js`
+- **Backend**: ASP.NET Core 8 Web API (C#)
+  - `POST /api/generate` to handle input (images + drawing + text) and call AI API (OpenAI/DALL·E or local stub)
+  - `POST /api/stripe/create-session` to create Stripe checkout session
+  - `POST /api/stripe/webhook` to receive payment confirmations
+  - Serve thumbnail previews (blurred) unless payment complete
 
----
+### ✅ Functional requirements:
+- Users can draw with mouse/touch (freehand only is fine)
+- Upload PNG/JPEG files (max 3)
+- Enter a short text prompt
+- Show 5 generated thumbnails as blurred previews
+- Only show full thumbnails after Stripe checkout
+- Track payment session in backend memory or simple storage
+- Frontend routes:
+  - `/` - Editor (canvas + image upload + prompt + generate button)
+  - `/results/:sessionId` - Result preview page (blurred)
+  - `/success` - Stripe payment success
 
-📁 `roblox-thumbnail-generator/`
+### 📦 Extras:
+- No need for database yet — use in-memory for session state
+- Add simple .env config for API keys (Stripe + OpenAI)
+- Use minimal CSS or Tailwind
+- Optionally use Vite for React app build
 
-```
-├── client/                   # React app
-│   ├── public/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── CanvasEditor.tsx     # Drawing component using Konva
-│   │   │   ├── ImageUploader.tsx    # File upload with preview
-│   │   │   ├── PromptInput.tsx      # Text input field
-│   │   │   └── ThumbnailPreview.tsx # Renders blurred/unlocked images
-│   │   ├── pages/
-│   │   │   ├── Home.tsx             # Main editor UI
-│   │   │   ├── Results.tsx          # Shows thumbnails post-gen
-│   │   │   └── Success.tsx          # Post-payment success screen
-│   │   ├── api/
-│   │   │   └── api.ts               # Axios-based client for backend API
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   └── index.css
-│   ├── vite.config.ts
-│   └── package.json
-│
-├── server/                   # .NET 8 Web API
-│   ├── Controllers/
-│   │   ├── GenerateController.cs    # Accepts drawing/uploaded images/text
-│   │   ├── StripeController.cs      # Creates sessions + webhook endpoint
-│   ├── Services/
-│   │   └── AiImageService.cs        # Stub AI gen (replace with OpenAI later)
-│   ├── Models/
-│   │   ├── GenerationRequest.cs
-│   │   └── ThumbnailResult.cs
-│   ├── Program.cs
-│   ├── appsettings.json
-│   └── roblox-thumbnail-generator.csproj
-│
-├── README.md
-└── .env.example                # For API keys and Stripe secret
-```
-
----
-
-### 🖌️ `CanvasEditor.tsx`
-A React component for sketching the thumbnail concept. Uses Konva.js for drawing.
-
-```tsx
-import React, { useRef, useState } from 'react';
-import { Stage, Layer, Line } from 'react-konva';
-
-const CanvasEditor: React.FC = () => {
-  const [lines, setLines] = useState<any[]>([]);
-  const isDrawing = useRef(false);
-
-  const handleMouseDown = (e: any) => {
-    isDrawing.current = true;
-    const pos = e.target.getStage().getPointerPosition();
-    setLines([...lines, { tool: 'pen', points: [pos.x, pos.y] }]);
-  };
-
-  const handleMouseMove = (e: any) => {
-    if (!isDrawing.current) return;
-    const stage = e.target.getStage();
-    const point = stage.getPointerPosition();
-    const lastLine = lines[lines.length - 1];
-    lastLine.points = lastLine.points.concat([point.x, point.y]);
-
-    lines.splice(lines.length - 1, 1, lastLine);
-    setLines(lines.concat());
-  };
-
-  const handleMouseUp = () => {
-    isDrawing.current = false;
-  };
-
-  const clearCanvas = () => setLines([]);
-
-  return (
-    <div>
-      <button onClick={clearCanvas}>Clear</button>
-      <Stage
-        width={600}
-        height={400}
-        onMouseDown={handleMouseDown}
-        onMousemove={handleMouseMove}
-        onMouseup={handleMouseUp}
-        style={{ border: '1px solid #ccc', background: 'white' }}
-      >
-        <Layer>
-          {lines.map((line, i) => (
-            <Line
-              key={i}
-              points={line.points}
-              stroke="#000"
-              strokeWidth={2}
-              tension={0.5}
-              lineCap="round"
-              globalCompositeOperation="source-over"
-            />
-          ))}
-        </Layer>
-      </Stage>
-    </div>
-  );
-};
-
-export default CanvasEditor;
-```
-
----
-
-Let me know when you're ready to move on to `ImageUploader.tsx` or want enhancements like brush size or color!
+Please scaffold the project structure:
+- React + Vite frontend folder
+- ASP.NET Core 8 backend folder
+- API connection between frontend and backend
+- Provide placeholder AI generation logic that returns fake thumbnails for now
