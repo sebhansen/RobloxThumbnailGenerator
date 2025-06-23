@@ -13,9 +13,12 @@ export interface CanvasState {
 interface CanvasEditorProps {
   image: string;
   onImageChange: () => void;
+  onSelectText: (text: any) => void;
+  onDeselectText: () => void;
+  isEditingText: boolean;
 }
 
-const CanvasEditor = forwardRef<any, CanvasEditorProps>(({ image, onImageChange }, ref) => {
+const CanvasEditor = forwardRef<any, CanvasEditorProps>(({ image, onImageChange, onSelectText, onDeselectText, isEditingText }, ref) => {
   const [tool, setTool] = useState('brush');
   const [lines, setLines] = useState<any[]>([]);
   const [texts, setTexts] = useState<any[]>([]);
@@ -28,7 +31,6 @@ const CanvasEditor = forwardRef<any, CanvasEditorProps>(({ image, onImageChange 
 
   const [history, setHistory] = useState<{ lines: any[], texts: any[] }[]>([]);
   const [historyStep, setHistoryStep] = useState(-1);
-  const [editingText, setEditingText] = useState<any>(null);
 
   useEffect(() => {
     if (img) {
@@ -69,7 +71,24 @@ const CanvasEditor = forwardRef<any, CanvasEditorProps>(({ image, onImageChange 
         setHistory([{ lines: initialLines, texts: initialTexts }]);
         setHistoryStep(0);
       }
-    }
+    },
+    updateText: (id: string, newText: string) => {
+      const newTexts = texts.map(t => {
+        if (t.id === id) {
+          return { ...t, text: newText };
+        }
+        return t;
+      });
+      setTexts(newTexts);
+    },
+    finalizeTextEdit: () => {
+      saveToHistory(lines, texts);
+    },
+    removeText: (id: string) => {
+      const newTexts = texts.filter(t => t.id !== id);
+      setTexts(newTexts);
+      saveToHistory(lines, newTexts);
+    },
   }));
 
   // When the image prop changes, it means we switched to a different thumbnail.
@@ -117,48 +136,38 @@ const CanvasEditor = forwardRef<any, CanvasEditorProps>(({ image, onImageChange 
 
   const handleMouseDown = (e: any) => {
     const stage = e.target.getStage();
+    if (e.target === stage) {
+      if (!isEditingText) {
+        onDeselectText();
+      }
+    }
     const pos = stage.getPointerPosition();
 
     if (tool === 'brush') {
       isDrawing.current = true;
       const newLine = {
+        id: `line-${lines.length}-${Date.now()}`,
         tool,
         stroke: brushColor,
         strokeWidth: brushSize,
         points: [pos.x, pos.y],
       };
       setLines([...lines, newLine]);
-    } else if (tool === 'text') {
-      // If already editing, save the current text first
-      if (editingText) {
-        const newTexts = texts
-          .map(t => (t.id === editingText.id ? { ...t, text: editingText.text } : t))
-          .filter(t => t.text.trim() !== '');
-        setTexts(newTexts);
-        saveToHistory(lines, newTexts);
-        setEditingText(null);
-      }
-      
+    } else if (tool === 'text' && !isEditingText) {
       const newTextId = `text-${texts.length}-${Date.now()}`;
       const newText = {
         x: pos.x,
         y: pos.y,
-        text: '', // Start with empty text
+        text: 'New Text', // Start with placeholder text
         fill: brushColor,
         fontSize: brushSize * 4,
-        draggable: true,
         id: newTextId,
       };
       
-      setTexts([...texts, newText]);
-
-      const stageBox = stageRef.current.container().getBoundingClientRect();
-      setEditingText({
-        id: newTextId,
-        x: stageBox.left + pos.x,
-        y: stageBox.top + pos.y,
-        text: '',
-      });
+      const newTexts = [...texts, newText];
+      setTexts(newTexts);
+      saveToHistory(lines, newTexts);
+      onSelectText(newText);
     }
   };
 
@@ -185,56 +194,7 @@ const CanvasEditor = forwardRef<any, CanvasEditorProps>(({ image, onImageChange 
 
   const handleTextDblClick = (e: any) => {
     const textNode = e.target;
-    const textPosition = textNode.getAbsolutePosition();
-    const stageBox = stageRef.current.container().getBoundingClientRect();
-
-    setEditingText({
-      id: textNode.id(),
-      x: stageBox.left + textPosition.x,
-      y: stageBox.top + textPosition.y,
-      text: textNode.text(),
-    });
-  };
-
-  const handleTextEdit = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (editingText) {
-      setEditingText({ ...editingText, text: e.target.value });
-    }
-  };
-
-  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault(); // Prevent new line
-      if (editingText) {
-        const newTexts = texts
-          .map(t => {
-            if (t.id === editingText.id) {
-              return { ...t, text: editingText.text };
-            }
-            return t;
-          })
-          .filter(t => t.text.trim() !== ''); // Remove if empty
-        setTexts(newTexts);
-        saveToHistory(lines, newTexts);
-        setEditingText(null);
-      }
-    }
-  };
-
-  const handleTextBlur = () => {
-    if (editingText) {
-        const newTexts = texts
-          .map(t => {
-            if (t.id === editingText.id) {
-              return { ...t, text: editingText.text };
-            }
-            return t;
-          })
-          .filter(t => t.text.trim() !== ''); // Remove if empty
-        setTexts(newTexts);
-        saveToHistory(lines, newTexts);
-        setEditingText(null);
-    }
+    onSelectText(textNode.attrs);
   };
 
   const handleTextDragEnd = (e: any) => {
@@ -251,6 +211,28 @@ const CanvasEditor = forwardRef<any, CanvasEditorProps>(({ image, onImageChange 
     });
     setTexts(newTexts);
     saveToHistory(lines, newTexts);
+  };
+
+  const handleLineDragEnd = (e: any) => {
+    const id = e.target.id();
+    const deltaX = e.target.x();
+    const deltaY = e.target.y();
+
+    const newLines = lines.map(line => {
+      if (line.id === id) {
+        const newPoints = line.points.map((point: number, i: number) => {
+          return i % 2 === 0 ? point + deltaX : point + deltaY;
+        });
+        return { ...line, points: newPoints };
+      }
+      return line;
+    });
+
+    setLines(newLines);
+    saveToHistory(newLines, texts);
+
+    // reset the line's position for next drag
+    e.target.position({ x: 0, y: 0 });
   };
 
   return (
@@ -286,18 +268,20 @@ const CanvasEditor = forwardRef<any, CanvasEditorProps>(({ image, onImageChange 
               width={canvasSize.width}
               height={canvasSize.height}
             />
-            {texts.map((text, i) => (
+            {texts.map((text) => (
               <Text
-                key={i}
+                key={text.id}
                 id={text.id}
                 {...text}
+                draggable={tool === 'text'}
                 onDblClick={handleTextDblClick}
                 onDragEnd={handleTextDragEnd}
               />
             ))}
-            {lines.map((line, i) => (
+            {lines.map((line) => (
               <Line
-                key={i}
+                key={line.id}
+                id={line.id}
                 points={line.points}
                 stroke={line.stroke}
                 strokeWidth={line.strokeWidth}
@@ -306,35 +290,12 @@ const CanvasEditor = forwardRef<any, CanvasEditorProps>(({ image, onImageChange 
                 globalCompositeOperation={
                   line.tool === 'eraser' ? 'destination-out' : 'source-over'
                 }
+                draggable={false}
+                onDragEnd={handleLineDragEnd}
               />
             ))}
           </Layer>
         </Stage>
-        {editingText && (
-            <textarea
-              value={editingText.text}
-              onChange={handleTextEdit}
-              onKeyDown={handleTextareaKeyDown}
-              onBlur={handleTextBlur}
-              autoFocus
-              style={{
-                position: 'absolute',
-                top: editingText.y,
-                left: editingText.x,
-                background: 'none',
-                border: '1px solid #a78bfa',
-                color: 'white',
-                fontSize: `${brushSize * 4}px`,
-                width: 'auto',
-                height: 'auto',
-                resize: 'none',
-                padding: '0',
-                margin: '0',
-                overflow: 'hidden',
-                fontFamily: 'sans-serif',
-              }}
-            />
-        )}
       </div>
 
       {/* Bottom buttons */}

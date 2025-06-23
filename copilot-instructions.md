@@ -140,7 +140,7 @@ dotnet run
 ---
 
 ## 🤝 Integration Flow
-1. User uploads images + draws
+1. User uploads image + draws
 2. Adds text + selects style/aspect
 3. Submits to `/api/generate`
 4. Gets 5 previews
